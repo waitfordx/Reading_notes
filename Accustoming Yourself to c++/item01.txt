@@ -1,0 +1,6 @@
+将 c++ 视为一个语言的联邦（4个次语言）
+	01 C ：区块 block 语句 statements 预处理器 preprocessor 内置数据类型 built-in data types 数组 arrays 指针 pointer 等统统来自 C。
+		   没有模板 templates 没有异常 exceptions 没有重载 overloading
+	02 Object-Oriented C++ : classes 封装（encapsulation）、继承（inheritance）、多态（polymorphism）、virtual函数（动态绑定）、
+	03 Template C++ : C++ 的泛型编程部分。
+	04 STL ： 标准模板程序库。容器（containers）、迭代器（iterators）、算法（algorithm）以及函数对象（function objects）。
