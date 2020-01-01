@@ -1,0 +1,198 @@
+尽可能使用 const
+
+01	const 允许你指定一个语义约束 ：指定一个不该被改动的对象
+
+02	const 可以用在 class 外部修饰 global 或 namespace 作用域中的常量
+				   修饰文件、函数、区块作用域中被声明为 static 的对象
+				   修饰 class 内部的 static 和 non-static 成员变量。
+				   面对指针，可以指出指针自身、指针所指对象。
+				   
+03	const 使用示例
+		char greeting[] = "Hello"； 			
+		char* p = greeting;						// non-const pointer non-const data
+		const char* p = greeting;				// non-const pointer const data
+		char* const p = greeting;				// const pointer non-const data
+		const char* const p = greeting;			// const pointer, const data
+	const 在 * 左边：被指对象是 const 的，（底层const）， const widget* pw 同 widget const * pw
+	const 在 * 右边：指针自身是 const 的，（顶层const）
+
+04	STL 迭代器同 const 
+	迭代器的作用同 T*， 声明迭代器为 const 同声明指针为 const : T* const(顶层const)
+	希望迭代器指向的对象不可改变时， 使用 const_iterator (同 const T*)
+	eg:
+		std::vector<int> vec;
+		...
+		const std::vector<int>::iterator iter = vec.begin()		// iter的作用像 T* const
+		*iter = 10;												// 没问题，改变 iter 所指对象
+		iter++													// 错误！！！ iter 本身是 const 的
+		
+		std::vector<int>::const_iterator cIter = vec.begin();
+		*cIter = 10;											// 错误！！！ cIter 指向的对象是 const
+		++cIter													// 没问题
+
+05	函数声明与 const
+	eg:
+		class Rational {...};
+		const Rational operator* (const Rational& lhs, const Rational& rhs);
+		if(a*b = c)												// 其实做一个比较动作。 返回 const 对象可以避免这种意外并保持安全性和高效性
+		
+06	const 成员函数
+	将 const 作用于成员函数 ：为了确认该成员函数可作用于 const 对象。
+		a: 它们使class接口更容易理解
+		b: 它们使操作 const 对象 成为可能
+	两个成员函数如果只是常量性不同，可以被重载
+	eg:
+		class TextBlock{
+		public :
+		...
+		const char& operator[] (std::size_t position) const		// operator[] for const 对象
+		{
+			return text[position]; 
+		}
+		char& operator[](std::size_t position)					// operator[] for non-const 对象
+		{
+			return text[position]; 
+		0}
+		private:
+			std::string text;
+		};
+		
+		TextBlock tb("Hello");
+		std::cout<< tb[0];										// 调用 non-const TextBlock::operator[]
+		void print(const TextBlock& ctb)
+		{
+			std::cout<< ctb[0];									// 调用 const TextBlock::operator[]
+			...
+		}
+		
+		重载 operator[] 并对不同的版本给予不同的返回类型， 就可以令const 和 non-const TextBlock 获得不同的处理；
+		std::cout<< tb[0];										// 没问题， 读一个 non-const TextBlock
+		tb[0] = 'x';											// 没问题， 写一个non-const TextBlock
+		std::cout << ctb[0];									// 没问题，读一个 const TextBlock
+		ctb[0] = 'x';											// 错误！！！写一个 const TextBlock
+		
+		bitwise constness : 成员函数只有在不改变对象的任何成员变量（static除外）时，才可以说是 const， 不更改任何一个 bit 。
+			对于许多成员函数，虽然不十足具备 const 性质，却能通过 bitwise 测试。一个更改了“指针所指对象”的成员函数虽然不能算是 const, 但如果只有指针隶属于对象，称此函数为 bitwise const 不会引发编译器异议。
+			eg: 假设我们有一个 TextBlock-like class,它将数据存储为 char* 而不是 string, 因为它需要和一个不认识 string 对象的 C API 打交道。
+			class CTextBlock{
+			public:
+				...
+				char& operator[] (std::size_t position) const	// bitwise const 声明， 但其实不合适。
+				{
+					return pText[position];
+				}
+			private:
+				char* pText;
+			};
+			operator[] 实现代码并不改变 pText,于是编译器认定它是 bitwise const 并产生目标码。
+			const CTextBlock cctb("Hello");
+			char* pc = &cctb[0];
+			*pc = 'J';
+			上述操作将 cctb 改变为了 Jello。创建一个常量对象最终却改变了它的值。
+			logical constness : 一个 const 成员函数可以修改它所处理的对象内的某些 bit ，但只有在客户端侦测不出的情况下才得如此。例如 CTextBlock class 有可能高速缓存文本区块的长度以便应付询问：
+			class CTextBlock{
+			public:
+				...
+				std::size_t length() const；
+			private：
+				char* pText;
+				std::size_t textLength;						// 最近一次计算的文本区块长度。
+				bool lengthIsValid;							// 目前的长度是否有效
+			};
+			std::size_t CTextBlock::length() const
+			{
+				if(!lengthIsValid)
+				{
+					textLength = std::strlen(pText);		// 错误， 在 const 成员函数内不能赋值给 textLength 和 lengthIsValid.
+					lengthIsValid = true;
+				}
+				return textLength;
+			}
+			length 的实现当然不是 bitwise const,因为 textLength 和 lengthIsValid 都可能被修改。这两个数据对于 const CTextBlock 对象而言虽然可接受， 但编译器不接受，他们坚持 bitwise constness.
+			利用 c++ 一个与 const 相关的摆动场可解决 ： mutable .mutable 释放掉 non-static 成员变量的bitwise constness 约束
+			class CTextBlock{
+			public:
+				...
+				std::size_t length() const;
+			private:
+				char* pText;
+				mutable std::size_t textLength;
+				mutable bool lengthIsValid;					// 这些成员变量可能总是会被更改，即使在 const 成员函数内。
+			};
+			std::size_t CTextBlock::length() const
+			{
+				if(!lengthIsValid)
+				{
+					textLength = std::strlen(pText);
+					lengthIsValid = true;
+				}
+				return textLength;
+			}
+			
+07	在 const 和 non-const 成员函数中避免重复
+	eg: 假设 TextBlock 内的 operator[] 不只是返回一个 reference 指向某字符，也执行边界检验，志记访问信息，甚至可能进行数据完善性检验。把这些同时放进 const 和 non-const operator[] 中 ：
+	class TextBlock{
+	public:
+		...
+		const char& operator[](std::size_t position) const
+		{
+			...												// 边界检验
+			...												// 志记数据访问
+			...												// 检验数据完整性
+			return text[position];
+		}
+		char& operator[](std::size_t position)
+		{
+			...												// 边界检验
+			...                                             // 志记数据访问
+			...												// 检验数据完整性
+			return text[position];
+		}
+		private:
+			std::string text;
+	};
+	其中发生的代码重复会带来编译时间、维护、和代码膨胀等问题。
+	必须令其中一个调用另一个，这促使我们将常量性转除（casting away constness）, 令 non-const 调用 const 是一个避免代码重复的安全做法。
+	class TextBlock{
+	public:
+		...
+		const char& operator[] (std::size_t position) const 
+		{
+			...												// 边界检验
+			...                                             // 志记数据访问
+			...												// 检验数据完整性
+			return text[position];
+		}
+		char& operator[](std::size_t position)				// 现在只调用 const operator
+		{
+			return const_cast<char&>(						// 将 op[] 返回值的 const 转除
+				static_cast<const TextBlock&>(*this)		// 为 *this 加上 const
+					[position]								// 调用 const op[]
+			);
+		}
+		...
+	};
+	第一次转型为 *this 加上 const 得以调用 const 版本。
+	第二次转型从 const operator[] 的返回值中移除 const
+	
+08	总结
+	将某些东西声明为 const 可以帮助编译器侦测出错误用法，const 可被施加于任何作用域内的对象、函数参数、返回类型、成员函数本体
+	编译器强制实施 bitwise constness, 编写程序时应该使用“概念上的常量性”
+	当 const 和 non-const 成员函数有着实质等价的实现时，令 non-const 调用 const 版本可避免代码重复。
+	
+	
+	
+	
+	
+		
+	
+	
+	
+	
+	
+		
+		
+		
+		
+	
+	
