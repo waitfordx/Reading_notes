@@ -1,0 +1,58 @@
+了解 c++ 默默编写并调用了哪些函数
+
+01	空类 empty class 与编译器默认创建函数
+	当一个空类被处理过后，编译器会为它声明一个copy构造函数、一个copy assignment 操作符 和一个析构函数， 以及 default 构造函数。
+	eg: 声明一个 Empty class 就好像下面的声明
+		class Empty{};  
+		class Empty{
+		public:
+			Empty() {...}
+			Empty(const Empty& rhs) {...}
+			~Empty() {...}
+			
+			Empty& operator=(const Empty& rhs) {...}
+		};
+	当这些函数被调用时，他们才会被编译器创建出来。
+	
+02	copy 构造函数与 copy assignment 操作符
+	编译器创建的版本只是单纯地将来源对象的每一个 non-static 成员变量拷贝到目标对象
+	eg:
+		template<typename T>
+		class NamedObject{
+		public:
+			NamedObject(const char* name, const T& value);
+			NamedObject(const std::string& name, const T& value);
+			...
+			private:
+				std::string nameValue;
+				T objectValue;
+		};
+		NamedObject<int> no1("Smallest prime Number", 2);
+		NamedObject<int>no2(no1);								// 调用了 copy 构造函数。
+		no2.nameValue 的初始化方式是调用 string 的 copy 构造函数并以 no1.nameValue 为实参
+		no2.objectValue 会以int的方式初始化：“拷贝 no1.objectValue 内的每一个 bits”
+	
+	对于不符合条件的情况， 编译器会拒绝为 class 生出 operator=
+		template<typename T>
+		class NamedObject{
+		public:
+			NamedObject(std::string& name, const T& value);		// 不再接收一个 const 名称，因为 nameValue是一个 refenrence-to-non-const string.
+			...
+		private:
+			std::string& nameValue;								// refenrence to string
+			const T objectValue;								// const T
+		};
+		
+		std::string newDog("Persephone");
+		std::string oldDog("Satch");
+		
+		NamedObject<int> p(newDog, 2);
+		NamedObject<int> s(oldDog, 36);
+		
+		p = s;
+		赋值之前 p.value 和 s.value 都指向一个（不同的）string 对象。
+		对于 refenrence , 并不允许 reference 改指向不同的对象， 对于 const .不允许更改。 
+		因此， 上述赋值操作会被拒绝编译。必须自己定义 copy assignment 操作符， 对于 base class 将 copy assignment 声明为 private 的情况，编译器拒绝为 derived class 生成 copy assignment 操作符。
+		
+03 总结
+	编译器可以暗自为 class 创建 defalut 构造函数、copy 构造函数、copy assignment 操作符以及析构函数 
