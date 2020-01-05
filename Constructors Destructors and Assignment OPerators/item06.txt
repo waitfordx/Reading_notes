@@ -1,0 +1,39 @@
+若不想使用编译器自动生成的函数，就该明确拒绝
+
+01	将相应地成员函数声明为 private 并且不予以实现
+	eg: 
+		class HomeForSale{...};						// 不希望进行拷贝的类
+		
+		HomeForSale h1;
+		HomeForSale h2;
+		HomeForSale h3(h1);							// 企图拷贝h1，不应该通过编译
+		h1 = h2;									// 企图拷贝h2 不该通过编译
+		
+		如果不希望 class 支持某一特定机能，不声明对应函数即可。但对 copy 构造函数和 copy assignment 操作符不起作用
+		可以将 copy 构造函数和 copy assignment 操作符声明为private。阻止了编译器创建，也阻止了人们调用它
+		对于 member 函数和 friend 函数还是可以调用private函数，不去定义这些函数可以避免调用，但是会产生一个连接错误
+			class HomeForSale{
+			public:
+				...
+			private:
+				HomeForSale(const HomeForSale&);
+				HomeForSale& operattor=(const HomeForSale&);	// 只声明
+			}
+			
+02	将声明转移到一个 base class 解决连接问题
+	class Uncopyable{
+	protected：
+		Uncopyable(){}
+		~Uncopyable(){}											// 允许derived 对象构造和析构
+	private：
+		Uncopyable(const Uncopyable&);
+		Uncopyable& operattor=(const Uncopyable&);				// 阻止了 copying
+	};
+	class HomeForSale: private Uncopyable{
+	...															// 不再声明 copy 构造函数和 copy assignment 操作符
+	};
+	
+03 总结：
+	为阻止编译器自动提供的机能，将相应成员函数声明为 private 并且不予以实现
+	使用 Uncopyable 这样的 baseclass
+	使用关键字 =delete（c++11新特性 该按本书中未提及）
