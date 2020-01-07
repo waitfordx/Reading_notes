@@ -1,0 +1,79 @@
+为多态基类声明 virtual 析构函数
+
+01	virtual 析构函数的使用场景
+	假设一种场景：设计一个TimeKeeper base class 和一些 derived classes 作为不同的即使方法
+	class TimeKeeper{
+	public：
+		TimeKeeper();
+		~TimeKeeper();
+		...
+	};
+	class AtomicClock: public TimeKeeper {...};
+	class WaterClock : public TimeKeeper {...};
+	class WristWatch ：public TimeKeeper {...};
+	对于只需要使用时间而不关心实现细节的情景，可以设计 factory(工厂)函数，返回指针指向一个计时对象。factory 函数会“返回一个 base class指针， 指向新生成的 derived class 对象”：
+	TimeKeeper* getTimeKeeper();				// 返回一个指针，指向一个TimeKeeper 派生类的动态分配对象
+	对于一个 factory 函数：被 getTimeKeeper() 返回的对象必须位于 heap。因此必须进行 delete
+	TimeKeeper* ptk = getTimeKeeper();			// 从 Timekeeper 继承体系获得一个动态分配的对象
+	...											// 使用
+	delete ptk;									// 释放它，避免资源泄露
+	
+	getTimeKeeper() 返回的指针指向一个 derived class 对象，该对象经由 base class 被删除， 而目前的 base class 有一个 non-virtual 析构函数。
+	结果未定义，通常会导致对象的 derived 成分未被销毁，base class 成分被销毁，形成一个 “局部销毁” 对象。
+	解决：给 base class 一个 virtual 析构函数。它会销毁整个对象，包括所有 derived class 成分
+	class TimeKeeper{
+	public:
+		TimeKeeper();
+		virtual ~TimeKeeper();
+		...
+	};
+	TimeKeeper* ptk = getTimeKeeper();
+	...
+	delete ptk;									// 正确
+	一般的 base class 除了析构函数之外通常还有其他 virtual 函数，可以实现在不同的 derived classes 中有不同的实现。只要带有 virtual 函数几乎确定应该也有一个 virtual 析构函数。
+
+02	不希望声明 virtual 析构函数的情景
+	如果 class 不含 virtual 函数，通常表示它并不意图被用做一个 base class。当 class 不企图被当作 base class，令其析构函数为 virtual 往往是个坏主意
+	eg：考虑一个用来表示二维空间坐标的 class 
+	class Point{
+	public:
+		Point(int xCoord, int yCoord);
+		~Point();
+	private:
+		int x, y;
+	};
+	如果 int 占用32 bits，那么 point 对象可以塞入一个 64-bit 缓存器中。
+	实现 virtual 函数时，对象必须携带某些信息，由一个 vptr(虚函数表指针)指出。vptr 指向一个由函数指针构成的数组，称为 vtbl（虚函数表）。
+	如果 point class 内含 virtual 函数，其对象体积会增加（vptr）。
+	无端地将所有 classes 析构函数声明为 virtual 就像完全不声明为 virtual 一样， 都是错误的，只有当 class 内含至少一个 virtual 函数时，才为它声明 virtual 析构函数。
+	
+03	non-virtual 析构函数问题
+	eg: 标准 string 不含任何 virtual 函数，但有时被错误的当做 base class：
+	class SpecialString：public std::string{
+		...									// string 有个 non-virtual 析构函数，坏主意！！！
+	};
+	SpecialString* pss = new SpecialString("Impending Doom");
+	std::string* ps;
+	...
+	ps = pss;
+	...
+	delete ps;								// 未定义、导致资源泄露
+
+04	pure virtual 析构函数
+	有时候令 class 带上一个 pure virtual 析构函数，可能更方便。
+	pure virtual 函数会导致 abstract classes，希望有抽象 class 却没有 pure virtual 函数时， 可以声明一个 pure virtual 析构函数（抽象 class 总是被用做 base class）
+	class AWOV{
+	public：	
+		virtual ~AWOV() = 0;
+	};
+	AWOV::~AWOV() { }						// 纯虚函数可以有定义
+	必须为这个 pure virtual 析构函数提供一份定义。
+	析构函数的运作方式是，最深层派生的那个 class 析构函数最先被调用。然后是每一个 base class 析构函数被调用。编译器会在 AWOV 的 derived classes 的析构函数中创建一个对 ~AWOV 的调用动作，所以必须为这个函数听一份定义。（连接器会抱怨）
+
+05	总结
+	polymorphic(多态性质的) base classes 应该声明一个 virtual 析构函数。如果一个 class 带有任何 virtual 函数，它就应该拥有一个 virtual 析构函数。
+	classes 的目的不是作为 base class 时，或者不具备多态性时，不该声明 virtual 析构函数。
+	
+ 	
+	
+	
