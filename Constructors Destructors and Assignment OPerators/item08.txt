@@ -1,0 +1,94 @@
+别让异常逃离析构函数
+
+01	不建议在析构函数中抛出异常
+	c++ 并不禁止析构函数抛出异常、但是不鼓励这样做。
+	class Widget{
+	public:
+		...
+		~Widget() {...}						// 假设这个可能抛出一个异常
+	};
+	void doSomething()
+	{
+		std::vector<Widget> v;
+		...
+	}										// v 在这里被自动销毁
+	当 vector v 被销毁时，有责任销毁内含的所有 Widgets，假设 v 内含十个Widgets，而在析构第一个元素期间，有个异常抛出。剩下的 Widgets 还是应该被销毁，假设第二个析构函数又抛出异常，会有两个同时作用的异常。
+	在两个异常同时存在的情况下，程序若不是结束执行就是导致不明确的行为。
+	
+02	析构函数中执行动作，该动作会抛出异常
+	class DBConnection {
+	public:
+		...
+		static DBConnection create();		// 返回 DBConnection 对象
+		
+		void close();						// 关闭联机；失败抛出异常
+	};
+	为确保客户不忘记在 DBConnection 对象上调用 close(),一个合理的想法是创建一个用来管理 DBConnection 资源的 class，并在析构函数中调用 close。
+	class DBConn{							// 用来管理 DBConnection 对象
+	public：
+		...
+		~DBConn()							// 确保数据库连接总是被关闭
+		{
+			db.close();
+		}
+	private:
+		DBConnection db;
+	};
+	
+	{										// 开启一个区块
+		DBConn dbc(DBConnection::create());
+		...
+	}										// 在区块结束点， DBConn 对象被销毁，因而自动为 DBConnection 对象调用 close()
+	如果调用导致异常，DBConn 析构函数会传播异常，会抛出麻烦
+	
+	如果抛出异常就结束程序，通常可以通过调用 abort 完成(适用于析构期间错误后，程序无法继续执行的情况)
+	DBConn::~DBConn()
+	{
+		try{ db.close(); }
+		catch(...)
+		{
+			制作运转记录，记下对 close 的调用失败;
+			std::abort();
+		}
+	}
+	
+	吞下因调用 close 而发生的异常(程序必须能够继续可靠地执行，即使遭遇并忽略了一个错误)
+	DBConn::~DBConn()
+	{
+		try { db.close(); }
+		catch(...)
+		{
+			制作运转记录，记下对 close 的调用失败;
+		}
+	}
+	
+03	让客户有机会处理异常
+	class DBConn{
+	public:
+		...
+		void close()							// 供客户使用的函数
+		{
+			db.close();
+			closed = true;
+		}
+		~DBConn()
+		{
+			if(!closed)							// 关闭连接（客户未关闭的话）
+			{
+				try{ db.close(); }
+				catch(...)
+				{
+					制作运转记录，记下对 close 的调用失败;
+					...
+				}
+			}
+		}
+	private:
+		DBConnection db;
+		bool closed;
+	};
+	把调用 close 的责任从析构函数转到客户手上。
+	
+04	总结
+	析构函数绝对不要抛出异常。如果一个被析构函数调用的函数可能抛出异常，析构函数应该捕捉任何异常，然后吞下它们或结束程序
+	如果客户需要对某个操作函数运行期间抛出的异常做出反应，那么 class 应该提供一个普通函数执行该操作。
